@@ -144,11 +144,11 @@ class SferaDataCollector(IDataCollector):
             logger.error(f"Failed to collect commits: {str(e)}")
             raise DataCollectionError(f"Failed to collect commits: {str(e)}")
 
-    async def collect_commit_diff(
+    async def collect_commit_details(
         self, project_key: str, repo_name: str, commit_sha: str
     ) -> dict[str, Any]:
         """
-        Собрать diff коммита.
+        Собрать детали коммита.
 
         Args:
             project_key: Ключ проекта
@@ -156,14 +156,14 @@ class SferaDataCollector(IDataCollector):
             commit_sha: SHA коммита
 
         Returns:
-            Diff коммита с детальной информацией
+            Детали коммита
 
         Raises:
             DataCollectionError: При ошибке сбора данных
         """
         try:
             logger.info(
-                f"Collecting commit diff for project {project_key}, "
+                f"Collecting commit details for project {project_key}, "
                 f"repository {repo_name}, commit {commit_sha}"
             )
 
@@ -171,7 +171,47 @@ class SferaDataCollector(IDataCollector):
                 f"projects/{project_key}/repos/{repo_name}/commits/{commit_sha}"
             )
 
-            logger.info("Collected commit diff")
+            logger.info("Collected commit details")
+            return response
+
+        except Exception as e:
+            logger.error(f"Failed to collect commit details: {str(e)}")
+            raise DataCollectionError(f"Failed to collect commit details: {str(e)}")
+
+    async def collect_commit_diff(
+        self, project_key: str, repo_name: str, commit_sha: str, binary: bool = False
+    ) -> dict[str, Any]:
+        """
+        Получить diff коммита (изменения) в base64.
+
+        Args:
+            project_key: Ключ проекта
+            repo_name: Имя репозитория
+            commit_sha: SHA коммита
+            binary: Включить бинарные файлы
+
+        Returns:
+            Diff коммита с полем content в base64
+
+        Raises:
+            DataCollectionError: При ошибке сбора данных
+        """
+        try:
+            logger.info(
+                f"Collecting commit diff (base64) for project {project_key}, "
+                f"repository {repo_name}, commit {commit_sha}"
+            )
+
+            params = {}
+            if binary:
+                params["binary"] = "true"
+
+            response = await self.api_client.get(
+                f"projects/{project_key}/repos/{repo_name}/commits/{commit_sha}/diff",
+                **params
+            )
+
+            logger.info("Collected commit diff in base64")
             return response
 
         except Exception as e:

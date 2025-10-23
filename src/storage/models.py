@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import ARRAY, JSON, DateTime, Float, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.storage.database import Base
@@ -15,10 +15,10 @@ class Project(Base):
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    external_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    external_id: Mapped[str] = mapped_column("key", String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -33,11 +33,11 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    external_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     project_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column("slug", String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     default_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -52,18 +52,16 @@ class Commit(Base):
     __tablename__ = "commits"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    external_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     repository_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column("sha", String(40), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
     author_name: Mapped[str] = mapped_column(String(255), nullable=False)
     author_email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    committed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    additions: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    deletions: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    total_changes: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    files_changed: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    committed_at: Mapped[datetime] = mapped_column("committed_date", DateTime(timezone=True), nullable=False)
+    diff_base64: Mapped[str | None] = mapped_column(Text, nullable=True)
+    branch_names: Mapped[list[str] | None] = mapped_column(ARRAY(String(255)), nullable=True)
+    parent_shas: Mapped[list[str] | None] = mapped_column(ARRAY(String(40)), nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -84,7 +82,7 @@ class Metric(Base):
     value: Mapped[float] = mapped_column(Float, nullable=False)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -102,7 +100,7 @@ class Anomaly(Base):
     severity: Mapped[str] = mapped_column(String(50), nullable=False)  # low, medium, high
     description: Mapped[str] = mapped_column(Text, nullable=False)
     detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -121,7 +119,7 @@ class Recommendation(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     priority: Mapped[str] = mapped_column(String(50), nullable=False)  # low, medium, high
     impact: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

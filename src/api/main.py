@@ -67,15 +67,22 @@ async def root() -> dict[str, Any]:
             "health": "/health",
             "docs": "/docs",
             "data_collection": f"{settings.api_prefix}/data",
+            "tasks": f"{settings.api_prefix}/tasks",
         },
     }
 
 
 # Подключаем роутеры
-from src.api.routes import data_collection
+from src.api.routes import data_collection, tasks
 
 app.include_router(
     data_collection.router,
     prefix=f"{settings.api_prefix}/data",
     tags=["Data Collection"],
+)
+
+app.include_router(
+    tasks.router,
+    prefix=settings.api_prefix,
+    tags=["Tasks"],
 )

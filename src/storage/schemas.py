@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ProjectBase(BaseModel):
@@ -12,7 +12,7 @@ class ProjectBase(BaseModel):
     external_id: str
     name: str
     description: str | None = None
-    metadata: dict[str, Any] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class ProjectCreate(ProjectBase):
@@ -26,7 +26,7 @@ class ProjectUpdate(BaseModel):
 
     name: str | None = None
     description: str | None = None
-    metadata: dict[str, Any] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class ProjectResponse(ProjectBase):
@@ -46,7 +46,7 @@ class RepositoryBase(BaseModel):
     project_id: int
     name: str
     default_branch: str | None = None
-    metadata: dict[str, Any] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class RepositoryCreate(RepositoryBase):
@@ -70,16 +70,14 @@ class CommitBase(BaseModel):
 
     external_id: str
     repository_id: int
-    author_name: str
-    author_email: EmailStr
     message: str
-    branch: str | None = None
+    author_name: str
+    author_email: str
     committed_at: datetime
-    additions: int | None = None
-    deletions: int | None = None
-    total_changes: int | None = None
-    files_changed: int | None = None
-    metadata: dict[str, Any] | None = None
+    diff_base64: str | None = None
+    branch_names: list[str] | None = None
+    parent_shas: list[str] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class CommitCreate(CommitBase):
@@ -107,7 +105,7 @@ class MetricBase(BaseModel):
     value: float
     period_start: datetime
     period_end: datetime
-    metadata: dict[str, Any] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class MetricCreate(MetricBase):
@@ -134,7 +132,7 @@ class AnomalyBase(BaseModel):
     severity: str = Field(..., pattern="^(low|medium|high)$")
     description: str
     detected_at: datetime
-    metadata: dict[str, Any] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class AnomalyCreate(AnomalyBase):
@@ -162,7 +160,7 @@ class RecommendationBase(BaseModel):
     description: str
     priority: str = Field(..., pattern="^(low|medium|high)$")
     impact: str | None = None
-    metadata: dict[str, Any] | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class RecommendationCreate(RecommendationBase):

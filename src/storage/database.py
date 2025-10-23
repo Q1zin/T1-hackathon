@@ -28,6 +28,9 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+# Alias для совместимости
+async_session_maker = AsyncSessionLocal
+
 # Базовый класс для моделей
 Base = declarative_base()
 

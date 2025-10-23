@@ -23,5 +23,16 @@ celery_app.conf.update(
     task_soft_time_limit=25 * 60,  # 25 minutes
 )
 
-# Автоматическое обнаружение задач
-celery_app.autodiscover_tasks(["src.tasks"])
+# Расписание для Celery Beat (каждые 10 минут)
+celery_app.conf.beat_schedule = {
+    "periodic-data-collection": {
+        "task": "periodic_data_collection",
+        "schedule": 600.0,  # 10 минут в секундах
+        "options": {
+            "expires": 540.0,  # Истекает через 9 минут, чтобы не накапливались задачи
+        }
+    },
+}
+
+# Импортируем задачи явно, чтобы они зарегистрировались
+from src.tasks import collection_tasks  # noqa: F401

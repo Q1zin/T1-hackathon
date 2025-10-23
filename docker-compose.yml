@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: codemetrics
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -56,6 +56,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./logs:/app/logs
+      - ./migrations:/app/migrations
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
 
   # Celery Worker (для фоновых задач)
@@ -81,7 +82,34 @@ services:
     volumes:
       - ./src:/app/src
       - ./logs:/app/logs
+      - ./migrations:/app/migrations
     command: celery -A src.tasks.celery_app worker --loglevel=info
+
+  # Celery Beat (для расписания задач)
+  celery_beat:
+    build: .
+    container_name: codemetrics_celery_beat
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://codemetrics:password@postgres:5432/codemetrics
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    env_file:
+      - .env
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./logs:/app/logs
+      - ./migrations:/app/migrations
+    command: celery -A src.tasks.celery_app beat --loglevel=info
 
 volumes:
   postgres_data:
