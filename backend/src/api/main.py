@@ -82,11 +82,13 @@ async def root() -> dict[str, Any]:
             "docs": "/docs",
             "data_collection": f"{settings.api_prefix}/data",
             "tasks": f"{settings.api_prefix}/tasks",
+            "personal_analytics": f"{settings.api_prefix}/personal",
+            "team_analytics": f"{settings.api_prefix}/team",
         },
     }
 
 
-from src.api.routes import data_collection, tasks
+from src.api.routes import data_collection, personal_analytics, tasks, team_analytics
 
 app.include_router(
     data_collection.router,
@@ -96,6 +98,18 @@ app.include_router(
 
 app.include_router(
     tasks.router,
-    prefix=settings.api_prefix,
+    prefix=f"{settings.api_prefix}/tasks",
     tags=["Tasks"],
+)
+
+app.include_router(
+    personal_analytics.router,
+    prefix=f"{settings.api_prefix}/personal",
+    tags=["Personal Analytics"],
+)
+
+app.include_router(
+    team_analytics.router,
+    prefix=f"{settings.api_prefix}/team",
+    tags=["Team Analytics"],
 )

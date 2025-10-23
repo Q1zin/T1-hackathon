@@ -9,7 +9,7 @@ from src.tasks.collection_tasks import (
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter()
 
 
 class TaskResponse(BaseModel):
