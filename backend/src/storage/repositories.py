@@ -1,14 +1,12 @@
-"""Репозитории для работы с данными (SOLID: Single Responsibility)."""
-
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.exceptions import NotFoundError, StorageError
+from src.core.exceptions import StorageError
 from src.core.interfaces import IRepository
 from src.core.logging import get_logger
-from src.storage.models import Anomaly, Commit, Metric, Project, Recommendation, Repository
+from src.storage.models import Commit, Metric, Project, Repository
 from src.storage.schemas import (
     CommitCreate,
     CommitResponse,
@@ -24,14 +22,10 @@ logger = get_logger(__name__)
 
 
 class ProjectRepository(IRepository[ProjectResponse, int]):
-    """Репозиторий для работы с проектами."""
-
     def __init__(self, session: AsyncSession) -> None:
-        """Инициализация репозитория."""
         self.session = session
 
     async def create(self, entity: ProjectCreate) -> ProjectResponse:
-        """Создать проект."""
         try:
             project = Project(**entity.model_dump())
             self.session.add(project)
@@ -43,7 +37,6 @@ class ProjectRepository(IRepository[ProjectResponse, int]):
             raise StorageError(f"Failed to create project: {str(e)}")
 
     async def get(self, id: int) -> ProjectResponse | None:
-        """Получить проект по ID."""
         try:
             result = await self.session.execute(select(Project).where(Project.id == id))
             project = result.scalar_one_or_none()
@@ -53,7 +46,6 @@ class ProjectRepository(IRepository[ProjectResponse, int]):
             raise StorageError(f"Failed to get project: {str(e)}")
 
     async def update(self, id: int, entity: ProjectCreate) -> ProjectResponse | None:
-        """Обновить проект."""
         try:
             result = await self.session.execute(select(Project).where(Project.id == id))
             project = result.scalar_one_or_none()
@@ -71,7 +63,6 @@ class ProjectRepository(IRepository[ProjectResponse, int]):
             raise StorageError(f"Failed to update project: {str(e)}")
 
     async def delete(self, id: int) -> bool:
-        """Удалить проект."""
         try:
             result = await self.session.execute(select(Project).where(Project.id == id))
             project = result.scalar_one_or_none()
@@ -86,10 +77,16 @@ class ProjectRepository(IRepository[ProjectResponse, int]):
             raise StorageError(f"Failed to delete project: {str(e)}")
 
     async def list(self, **filters: Any) -> list[ProjectResponse]:
-        """Получить список проектов."""
         try:
             query = select(Project)
-            # TODO: Добавить фильтрацию
+
+            if "is_public" in filters:
+                query = query.where(Project.is_public == filters["is_public"])
+            if "limit" in filters:
+                query = query.limit(filters["limit"])
+            if "offset" in filters:
+                query = query.offset(filters["offset"])
+
             result = await self.session.execute(query)
             projects = result.scalars().all()
             return [ProjectResponse.model_validate(p) for p in projects]
@@ -99,14 +96,10 @@ class ProjectRepository(IRepository[ProjectResponse, int]):
 
 
 class RepositoryRepository(IRepository[RepositoryResponse, int]):
-    """Репозиторий для работы с репозиториями."""
-
     def __init__(self, session: AsyncSession) -> None:
-        """Инициализация репозитория."""
         self.session = session
 
     async def create(self, entity: RepositoryCreate) -> RepositoryResponse:
-        """Создать репозиторий."""
         try:
             repository = Repository(**entity.model_dump())
             self.session.add(repository)
@@ -118,7 +111,6 @@ class RepositoryRepository(IRepository[RepositoryResponse, int]):
             raise StorageError(f"Failed to create repository: {str(e)}")
 
     async def get(self, id: int) -> RepositoryResponse | None:
-        """Получить репозиторий по ID."""
         try:
             result = await self.session.execute(select(Repository).where(Repository.id == id))
             repository = result.scalar_one_or_none()
@@ -128,7 +120,6 @@ class RepositoryRepository(IRepository[RepositoryResponse, int]):
             raise StorageError(f"Failed to get repository: {str(e)}")
 
     async def update(self, id: int, entity: RepositoryCreate) -> RepositoryResponse | None:
-        """Обновить репозиторий."""
         try:
             result = await self.session.execute(select(Repository).where(Repository.id == id))
             repository = result.scalar_one_or_none()
@@ -146,7 +137,6 @@ class RepositoryRepository(IRepository[RepositoryResponse, int]):
             raise StorageError(f"Failed to update repository: {str(e)}")
 
     async def delete(self, id: int) -> bool:
-        """Удалить репозиторий."""
         try:
             result = await self.session.execute(select(Repository).where(Repository.id == id))
             repository = result.scalar_one_or_none()
@@ -161,10 +151,18 @@ class RepositoryRepository(IRepository[RepositoryResponse, int]):
             raise StorageError(f"Failed to delete repository: {str(e)}")
 
     async def list(self, **filters: Any) -> list[RepositoryResponse]:
-        """Получить список репозиториев."""
         try:
             query = select(Repository)
-            # TODO: Добавить фильтрацию по project_id и другим полям
+
+            if "project_id" in filters:
+                query = query.where(Repository.project_id == filters["project_id"])
+            if "is_fork" in filters:
+                query = query.where(Repository.is_fork == filters["is_fork"])
+            if "limit" in filters:
+                query = query.limit(filters["limit"])
+            if "offset" in filters:
+                query = query.offset(filters["offset"])
+
             result = await self.session.execute(query)
             repositories = result.scalars().all()
             return [RepositoryResponse.model_validate(r) for r in repositories]
@@ -174,14 +172,10 @@ class RepositoryRepository(IRepository[RepositoryResponse, int]):
 
 
 class CommitRepository(IRepository[CommitResponse, int]):
-    """Репозиторий для работы с коммитами."""
-
     def __init__(self, session: AsyncSession) -> None:
-        """Инициализация репозитория."""
         self.session = session
 
     async def create(self, entity: CommitCreate) -> CommitResponse:
-        """Создать коммит."""
         try:
             commit = Commit(**entity.model_dump())
             self.session.add(commit)
@@ -193,7 +187,6 @@ class CommitRepository(IRepository[CommitResponse, int]):
             raise StorageError(f"Failed to create commit: {str(e)}")
 
     async def get(self, id: int) -> CommitResponse | None:
-        """Получить коммит по ID."""
         try:
             result = await self.session.execute(select(Commit).where(Commit.id == id))
             commit = result.scalar_one_or_none()
@@ -203,7 +196,6 @@ class CommitRepository(IRepository[CommitResponse, int]):
             raise StorageError(f"Failed to get commit: {str(e)}")
 
     async def update(self, id: int, entity: CommitCreate) -> CommitResponse | None:
-        """Обновить коммит."""
         try:
             result = await self.session.execute(select(Commit).where(Commit.id == id))
             commit = result.scalar_one_or_none()
@@ -221,7 +213,6 @@ class CommitRepository(IRepository[CommitResponse, int]):
             raise StorageError(f"Failed to update commit: {str(e)}")
 
     async def delete(self, id: int) -> bool:
-        """Удалить коммит."""
         try:
             result = await self.session.execute(select(Commit).where(Commit.id == id))
             commit = result.scalar_one_or_none()
@@ -236,10 +227,24 @@ class CommitRepository(IRepository[CommitResponse, int]):
             raise StorageError(f"Failed to delete commit: {str(e)}")
 
     async def list(self, **filters: Any) -> list[CommitResponse]:
-        """Получить список коммитов."""
         try:
             query = select(Commit)
-            # TODO: Добавить фильтрацию
+
+            if "repository_id" in filters:
+                query = query.where(Commit.repository_id == filters["repository_id"])
+            if "author_email" in filters:
+                query = query.where(Commit.author_email == filters["author_email"])
+            if "since" in filters:
+                query = query.where(Commit.committed_at >= filters["since"])
+            if "until" in filters:
+                query = query.where(Commit.committed_at <= filters["until"])
+            if "limit" in filters:
+                query = query.limit(filters["limit"])
+            if "offset" in filters:
+                query = query.offset(filters["offset"])
+
+            query = query.order_by(Commit.committed_at.desc())
+
             result = await self.session.execute(query)
             commits = result.scalars().all()
             return [CommitResponse.model_validate(c) for c in commits]
@@ -249,14 +254,10 @@ class CommitRepository(IRepository[CommitResponse, int]):
 
 
 class MetricRepository(IRepository[MetricResponse, int]):
-    """Репозиторий для работы с метриками."""
-
     def __init__(self, session: AsyncSession) -> None:
-        """Инициализация репозитория."""
         self.session = session
 
     async def create(self, entity: MetricCreate) -> MetricResponse:
-        """Создать метрику."""
         try:
             metric = Metric(**entity.model_dump())
             self.session.add(metric)
@@ -268,7 +269,6 @@ class MetricRepository(IRepository[MetricResponse, int]):
             raise StorageError(f"Failed to create metric: {str(e)}")
 
     async def get(self, id: int) -> MetricResponse | None:
-        """Получить метрику по ID."""
         try:
             result = await self.session.execute(select(Metric).where(Metric.id == id))
             metric = result.scalar_one_or_none()
@@ -278,7 +278,6 @@ class MetricRepository(IRepository[MetricResponse, int]):
             raise StorageError(f"Failed to get metric: {str(e)}")
 
     async def update(self, id: int, entity: MetricCreate) -> MetricResponse | None:
-        """Обновить метрику."""
         try:
             result = await self.session.execute(select(Metric).where(Metric.id == id))
             metric = result.scalar_one_or_none()
@@ -296,7 +295,6 @@ class MetricRepository(IRepository[MetricResponse, int]):
             raise StorageError(f"Failed to update metric: {str(e)}")
 
     async def delete(self, id: int) -> bool:
-        """Удалить метрику."""
         try:
             result = await self.session.execute(select(Metric).where(Metric.id == id))
             metric = result.scalar_one_or_none()
@@ -311,10 +309,26 @@ class MetricRepository(IRepository[MetricResponse, int]):
             raise StorageError(f"Failed to delete metric: {str(e)}")
 
     async def list(self, **filters: Any) -> list[MetricResponse]:
-        """Получить список метрик."""
         try:
             query = select(Metric)
-            # TODO: Добавить фильтрацию
+
+            if "repository_id" in filters:
+                query = query.where(Metric.repository_id == filters["repository_id"])
+            if "metric_type" in filters:
+                query = query.where(Metric.metric_type == filters["metric_type"])
+            if "metric_name" in filters:
+                query = query.where(Metric.metric_name == filters["metric_name"])
+            if "since" in filters:
+                query = query.where(Metric.calculated_at >= filters["since"])
+            if "until" in filters:
+                query = query.where(Metric.calculated_at <= filters["until"])
+            if "limit" in filters:
+                query = query.limit(filters["limit"])
+            if "offset" in filters:
+                query = query.offset(filters["offset"])
+
+            query = query.order_by(Metric.calculated_at.desc())
+
             result = await self.session.execute(query)
             metrics = result.scalars().all()
             return [MetricResponse.model_validate(m) for m in metrics]
