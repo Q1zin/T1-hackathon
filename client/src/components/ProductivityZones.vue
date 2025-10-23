@@ -1,11 +1,25 @@
 <template>
-  <div class="productivity-zones">
-    <div
-      v-for="(value, index) in zones"
-      :key="index"
-      class="zone-bar"
-      :style="{ opacity: value }"
-    ></div>
+  <div class="productivity-zones-wrapper">
+    <div class="date-labels">
+      <span class="date-label">1-3</span>
+      <span class="date-label">4-6</span>
+      <span class="date-label">7-9</span>
+      <span class="date-label">10-12</span>
+      <span class="date-label">13-15</span>
+      <span class="date-label">16-18</span>
+      <span class="date-label">19-21</span>
+      <span class="date-label">22-24</span>
+      <span class="date-label">25-27</span>
+      <span class="date-label">28-31</span>
+    </div>
+    <div class="productivity-zones">
+      <div
+        v-for="(value, index) in zones"
+        :key="index"
+        class="zone-bar"
+        :style="{ opacity: value }"
+      ></div>
+    </div>
   </div>
 </template>
 
@@ -22,6 +36,12 @@ defineProps({
 </script>
 
 <style scoped>
+.productivity-zones-wrapper {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .productivity-zones {
   display: inline-flex;
   flex-direction: column;
@@ -33,6 +53,24 @@ defineProps({
     0 4px 6px -1px rgba(0, 0, 0, 0.3),
     0 2px 4px -1px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 0 rgba(148, 163, 184, 0.1);
+}
+
+.date-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+
+.date-label {
+  height: 8px;
+  font-size: 9px;
+  color: #cbd5e1;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  transition: all 0.3s ease;
 }
 
 .zone-bar {
