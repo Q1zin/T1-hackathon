@@ -23,7 +23,7 @@
 
 ## Быстрый старт
 
-См. [QUICK_START.md](QUICK_START.md)
+См. [QUICK_START.md](backend/QUICK_START.md)
 
 ## API Endpoints
 
