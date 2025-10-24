@@ -57,3 +57,58 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
         status=task_result.status,
         result=task_result.result if task_result.ready() else None
     )
+
+
+class DBStatsResponse(BaseModel):
+    projects_count: int
+    repositories_count: int
+    commits_count: int
+    commits_by_email: dict[str, int]
+
+
+@router.get("/db-stats", response_model=DBStatsResponse)
+async def get_db_stats() -> DBStatsResponse:
+    """
+    Получить статистику по данным в БД (для диагностики).
+
+    Returns:
+        Статистика: количество проектов, репозиториев, коммитов
+    """
+    from sqlalchemy import func, select
+    from src.storage.database import get_db
+    from src.storage.models import Commit, Project, Repository
+
+    async for db in get_db():
+        # Подсчет проектов
+        projects_result = await db.execute(select(func.count(Project.id)))
+        projects_count = projects_result.scalar() or 0
+
+        # Подсчет репозиториев
+        repos_result = await db.execute(select(func.count(Repository.id)))
+        repos_count = repos_result.scalar() or 0
+
+        # Подсчет коммитов
+        commits_result = await db.execute(select(func.count(Commit.id)))
+        commits_count = commits_result.scalar() or 0
+
+        # Подсчет коммитов по email
+        commits_by_email_result = await db.execute(
+            select(
+                Commit.author_email,
+                func.count(Commit.id).label("count")
+            )
+            .group_by(Commit.author_email)
+            .order_by(func.count(Commit.id).desc())
+            .limit(10)
+        )
+        commits_by_email = {
+            row.author_email: row.count
+            for row in commits_by_email_result.all()
+        }
+
+        return DBStatsResponse(
+            projects_count=projects_count,
+            repositories_count=repos_count,
+            commits_count=commits_count,
+            commits_by_email=commits_by_email
+        )

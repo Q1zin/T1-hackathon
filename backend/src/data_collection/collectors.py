@@ -144,6 +144,131 @@ class SferaDataCollector(IDataCollector):
             logger.error(f"Failed to collect commits: {str(e)}")
             raise DataCollectionError(f"Failed to collect commits: {str(e)}")
 
+    async def collect_all_commits(
+        self,
+        project_key: str,
+        repo_name: str,
+        ref_name: str | None = None,
+        max_commits: int | None = None,
+        after_date: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Собрать ВСЕ коммиты репозитория с пагинацией.
+
+        Args:
+            project_key: Ключ проекта
+            repo_name: Имя репозитория
+            ref_name: Имя ветки (опционально)
+            max_commits: Максимальное количество коммитов (None = все)
+            after_date: Фильтр - только коммиты после этой даты (ISO format: "2024-01-01T00:00:00Z")
+
+        Returns:
+            Список всех коммитов
+
+        Raises:
+            DataCollectionError: При ошибке сбора данных
+        """
+        try:
+            logger.info(
+                f"Starting FULL commits collection for {project_key}/{repo_name}, "
+                f"ref: {ref_name or 'default'}, after_date: {after_date or 'all time'}"
+            )
+
+            all_commits: list[dict[str, Any]] = []
+            cursor: str | None = None
+            page_num = 1
+
+            # Парсим дату для фильтрации
+            from datetime import datetime
+            filter_date = None
+            if after_date:
+                try:
+                    from dateutil import parser
+                    filter_date = parser.parse(after_date)
+                    logger.info(f"Will filter commits after {filter_date}")
+                except Exception as e:
+                    logger.warning(f"Failed to parse after_date {after_date}: {e}")
+
+            while True:
+                # Собираем страницу коммитов
+                commits_data = await self.collect_commits(
+                    project_key=project_key,
+                    repo_name=repo_name,
+                    ref_name=ref_name,
+                    limit=1000,
+                    cursor=cursor
+                )
+
+                commits = commits_data["commits"]
+                page_info = commits_data["page_info"]
+
+                # Фильтруем по дате если задан фильтр
+                if filter_date:
+                    filtered_commits = []
+                    stop_collection = False
+
+                    for commit in commits:
+                        # Получаем дату коммита
+                        commit_date_str = commit.get("created_at")
+                        if commit_date_str:
+                            try:
+                                from dateutil import parser
+                                commit_date = parser.parse(commit_date_str)
+
+                                # Если коммит старше фильтра - останавливаем сбор
+                                if commit_date < filter_date:
+                                    stop_collection = True
+                                    logger.info(
+                                        f"Reached commits older than {after_date}, "
+                                        f"stopping collection"
+                                    )
+                                    break
+
+                                filtered_commits.append(commit)
+                            except Exception as e:
+                                logger.warning(f"Failed to parse commit date: {e}")
+                                filtered_commits.append(commit)
+                        else:
+                            filtered_commits.append(commit)
+
+                    commits = filtered_commits
+
+                    if stop_collection:
+                        all_commits.extend(commits)
+                        logger.info(
+                            f"Page {page_num}: collected {len(commits)} commits "
+                            f"(total: {len(all_commits)}) - STOPPED by date filter"
+                        )
+                        break
+
+                all_commits.extend(commits)
+                logger.info(
+                    f"Page {page_num}: collected {len(commits)} commits "
+                    f"(total: {len(all_commits)})"
+                )
+
+                # Проверяем лимит
+                if max_commits and len(all_commits) >= max_commits:
+                    all_commits = all_commits[:max_commits]
+                    logger.info(f"Reached max_commits limit: {max_commits}")
+                    break
+
+                # Проверяем есть ли следующая страница
+                next_cursor = page_info.get("next_cursor")
+                if not next_cursor:
+                    logger.info("No more pages, collection complete")
+                    break
+
+                cursor = next_cursor
+                page_num += 1
+
+            logger.info(f"FULL collection completed: {len(all_commits)} total commits")
+            return all_commits
+
+        except Exception as e:
+            logger.error(f"Failed to collect all commits: {str(e)}")
+            raise DataCollectionError(f"Failed to collect all commits: {str(e)}")
+
     async def collect_commit_details(
         self, project_key: str, repo_name: str, commit_sha: str
     ) -> dict[str, Any]:

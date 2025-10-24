@@ -1,9 +1,12 @@
 """API эндпоинты для персональной аналитики пользователей."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import EmailStr
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.analytics.personal_analytics_service import PersonalAnalyticsService
 from src.core.logging import get_logger
+from src.storage.database import get_db
 from src.storage.analytics_schemas import (
     Achievement,
     DiffItem,
@@ -31,30 +34,25 @@ router = APIRouter()
 
 @router.get("/year-activity", response_model=YearActivityResponse)
 async def get_year_activity(
-    email: EmailStr = Query(..., description="Email пользователя")
+    email: EmailStr = Query(..., description="Email пользователя"),
+    db: AsyncSession = Depends(get_db)
 ) -> YearActivityResponse:
     """
     Активность за год (количество коммитов в день).
 
     Args:
         email: Email пользователя
+        db: Сессия базы данных
 
     Returns:
         Мапа: дата -> количество коммитов
     """
-    # TODO: Реализовать логику получения активности из БД
     logger.info(f"Getting year activity for {email}")
 
-    # Заглушка
-    return YearActivityResponse(
-        data={
-            "2024-10-01": 5,
-            "2024-10-02": 3,
-            "2024-10-03": 8,
-            "2024-10-04": 2,
-            "2024-10-05": 0,
-        }
-    )
+    service = PersonalAnalyticsService(db)
+    activity_data = await service.get_year_activity(email)
+
+    return YearActivityResponse(data=activity_data)
 
 
 @router.get("/language-stats", response_model=LanguageStatsResponse)

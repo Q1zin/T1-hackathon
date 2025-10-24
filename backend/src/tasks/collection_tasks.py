@@ -15,23 +15,18 @@ from src.tasks.celery_app import celery_app
 
 logger = get_logger(__name__)
 
-_engine = None
-_async_session_maker = None
-
 
 def get_async_session_maker():
-    global _engine, _async_session_maker
-    if _async_session_maker is None:
-        settings = get_settings()
-        _engine = create_async_engine(
-            str(settings.database_url),
-            echo=False,
-            pool_pre_ping=True,
-            pool_size=5,
-            max_overflow=10,
-        )
-        _async_session_maker = async_sessionmaker(_engine, expire_on_commit=False)
-    return _async_session_maker
+    """Create a new async session maker for each task to avoid event loop conflicts."""
+    settings = get_settings()
+    engine = create_async_engine(
+        str(settings.database_url),
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+    )
+    return async_sessionmaker(engine, expire_on_commit=False), engine
 
 
 def run_async(coro):
@@ -62,77 +57,80 @@ async def _collect_all_projects_async() -> dict[str, int]:
     api_client = SferaAPIClient()
     collector = SferaDataCollector(api_client)
 
-    session_maker = get_async_session_maker()
-    async with session_maker() as session:
-        project_repo = ProjectRepository(session)
-        repo_repo = RepositoryRepository(session)
+    session_maker, engine = get_async_session_maker()
+    try:
+        async with session_maker() as session:
+            project_repo = ProjectRepository(session)
+            repo_repo = RepositoryRepository(session)
 
-        projects_count = 0
-        repos_count = 0
+            projects_count = 0
+            repos_count = 0
 
-        try:
-            logger.info("Fetching projects from Sfera API")
-            projects_data = await collector.collect_projects()
-            projects = projects_data["projects"]
-            logger.info(f"Found {len(projects)} projects")
+            try:
+                logger.info("Fetching projects from Sfera API")
+                projects_data = await collector.collect_projects()
+                projects = projects_data["projects"]
+                logger.info(f"Found {len(projects)} projects")
 
-            for project in projects:
-                project_key = project["name"]
-                result = await session.execute(
-                    select(Project).where(Project.external_id == project_key)
-                )
-                existing_project = result.scalar_one_or_none()
-
-                if existing_project:
-                    db_project_id = existing_project.id
-                else:
-                    project_create = ProjectCreate(
-                        external_id=project_key,
-                        name=project.get("full_name", project_key),
-                        description=project.get("description"),
-                        is_public=project.get("public", False),
-                        extra_data={"links": project.get("links")}
-                    )
-                    db_project = await project_repo.create(project_create)
-                    db_project_id = db_project.id
-                    projects_count += 1
-                    logger.info(f"Created project: {project.get('full_name', project_key)}")
-
-                repos_data = await collector.collect_repositories(project_key)
-                repositories = repos_data["repositories"]
-
-                for repo in repositories:
-                    repo_slug = repo.get("slug") or repo.get("name")
+                for project in projects:
+                    project_key = project["name"]
                     result = await session.execute(
-                        select(Repository).where(
-                            Repository.project_id == db_project_id,
-                            Repository.external_id == repo_slug
-                        )
+                        select(Project).where(Project.external_id == project_key)
                     )
-                    existing_repo = result.scalar_one_or_none()
+                    existing_project = result.scalar_one_or_none()
 
-                    if not existing_repo:
-                        repo_create = RepositoryCreate(
-                            external_id=repo_slug,
-                            project_id=db_project_id,
-                            name=repo.get("name", repo_slug),
-                            description=repo.get("description"),
-                            default_branch=repo.get("default_branch"),
-                            clone_url=repo.get("links", {}).get("clone", [{}])[0].get("href"),
-                            is_fork=repo.get("is_fork", False),
-                            extra_data={"forkable": repo.get("forkable"), "links": repo.get("links")}
+                    if existing_project:
+                        db_project_id = existing_project.id
+                    else:
+                        project_create = ProjectCreate(
+                            external_id=project_key,
+                            name=project.get("full_name", project_key),
+                            description=project.get("description"),
+                            is_public=project.get("public", False),
+                            extra_data={"links": project.get("links")}
                         )
-                        await repo_repo.create(repo_create)
-                        repos_count += 1
+                        db_project = await project_repo.create(project_create)
+                        db_project_id = db_project.id
+                        projects_count += 1
+                        logger.info(f"Created project: {project.get('full_name', project_key)}")
 
-            await session.commit()
-            logger.info(f"Projects collection completed: {projects_count} projects, {repos_count} repos")
-            return {"projects": projects_count, "repositories": repos_count}
+                    repos_data = await collector.collect_repositories(project_key)
+                    repositories = repos_data["repositories"]
 
-        except Exception as e:
-            logger.error(f"Error during projects collection: {str(e)}")
-            await session.rollback()
-            raise
+                    for repo in repositories:
+                        repo_slug = repo.get("slug") or repo.get("name")
+                        result = await session.execute(
+                            select(Repository).where(
+                                Repository.project_id == db_project_id,
+                                Repository.external_id == repo_slug
+                            )
+                        )
+                        existing_repo = result.scalar_one_or_none()
+
+                        if not existing_repo:
+                            repo_create = RepositoryCreate(
+                                external_id=repo_slug,
+                                project_id=db_project_id,
+                                name=repo.get("name", repo_slug),
+                                description=repo.get("description"),
+                                default_branch=repo.get("default_branch"),
+                                clone_url=repo.get("links", {}).get("clone", [{}])[0].get("href"),
+                                is_fork=repo.get("is_fork", False),
+                                extra_data={"forkable": repo.get("forkable"), "links": repo.get("links")}
+                            )
+                            await repo_repo.create(repo_create)
+                            repos_count += 1
+
+                await session.commit()
+                logger.info(f"Projects collection completed: {projects_count} projects, {repos_count} repos")
+                return {"projects": projects_count, "repositories": repos_count}
+
+            except Exception as e:
+                logger.error(f"Error during projects collection: {str(e)}")
+                await session.rollback()
+                raise
+    finally:
+        await engine.dispose()
 
 
 @celery_app.task(name="collect_repository_commits")
@@ -145,99 +143,114 @@ async def _collect_repository_commits_async(project_key: str, repo_slug: str) ->
     api_client = SferaAPIClient()
     collector = SferaDataCollector(api_client)
 
-    session_maker = get_async_session_maker()
-    async with session_maker() as session:
-        commit_repo = CommitRepository(session)
-        commits_count = 0
+    session_maker, engine = get_async_session_maker()
+    try:
+        async with session_maker() as session:
+            commit_repo = CommitRepository(session)
+            commits_count = 0
 
-        try:
-            project_result = await session.execute(
-                select(Project).where(Project.external_id == project_key)
-            )
-            project = project_result.scalar_one_or_none()
-            if not project:
-                logger.error(f"Project {project_key} not found")
-                return {"collected": 0, "error": "Project not found"}
-
-            result = await session.execute(
-                select(Repository).where(
-                    Repository.project_id == project.id,
-                    Repository.external_id == repo_slug
+            try:
+                project_result = await session.execute(
+                    select(Project).where(Project.external_id == project_key)
                 )
-            )
-            repository = result.scalar_one_or_none()
-            if not repository:
-                logger.error(f"Repository {project_key}/{repo_slug} not found")
-                return {"collected": 0, "error": "Repository not found"}
+                project = project_result.scalar_one_or_none()
+                if not project:
+                    logger.error(f"Project {project_key} not found")
+                    return {"collected": 0, "error": "Project not found"}
 
-            commits_data = await collector.collect_commits(project_key, repo_slug)
-            all_commits = commits_data["commits"]
-            logger.info(f"Found {len(all_commits)} commits")
-
-            for commit in all_commits:
-                commit_id = commit.get("id") or commit.get("sha") or commit.get("hash")
                 result = await session.execute(
-                    select(Commit).where(
-                        Commit.external_id == commit_id,
-                        Commit.repository_id == repository.id
+                    select(Repository).where(
+                        Repository.project_id == project.id,
+                        Repository.external_id == repo_slug
                     )
                 )
-                if result.scalar_one_or_none():
-                    continue
+                repository = result.scalar_one_or_none()
+                if not repository:
+                    logger.error(f"Repository {project_key}/{repo_slug} not found")
+                    return {"collected": 0, "error": "Repository not found"}
 
-                diff_base64 = None
-                try:
-                    diff_data = await collector.collect_commit_diff(project_key, repo_slug, commit_id)
-                    if "data" in diff_data and "content" in diff_data["data"]:
-                        diff_base64 = diff_data["data"]["content"]
-                except Exception as e:
-                    logger.warning(f"Failed to collect diff for {commit_id}: {str(e)}")
+                # Используем collect_all_commits для получения коммитов с пагинацией
+                # Ограничиваем последними 5 годами для оптимизации
+                from datetime import datetime, timezone, timedelta
+                five_years_ago = datetime.now(timezone.utc) - timedelta(days=1825)
+                after_date_str = five_years_ago.isoformat()
 
-                author = commit.get("author", {})
-                committer = commit.get("committer", {})
-
-                committer_timestamp = commit.get("committer_timestamp")
-                author_timestamp = commit.get("author_timestamp")
-
-                if committer_timestamp:
-                    committed_at = datetime.fromtimestamp(committer_timestamp / 1000, tz=timezone.utc)
-                elif "created_at" in commit:
-                    from dateutil import parser
-                    committed_at = parser.parse(commit["created_at"])
-                else:
-                    committed_at = datetime.now(timezone.utc)
-
-                if author_timestamp:
-                    authored_at = datetime.fromtimestamp(author_timestamp / 1000, tz=timezone.utc)
-                else:
-                    authored_at = committed_at
-
-                commit_create = CommitCreate(
-                    external_id=commit_id,
-                    repository_id=repository.id,
-                    author_name=author.get("name", "Unknown"),
-                    author_email=author.get("email_address") or author.get("email", "unknown@example.com"),
-                    committer_name=committer.get("name", "Unknown"),
-                    committer_email=committer.get("email_address") or committer.get("email", "unknown@example.com"),
-                    message=commit.get("message", ""),
-                    authored_date=authored_at,
-                    committed_at=committed_at,
-                    diff_base64=diff_base64,
-                    branch_names=commit.get("branch_names"),
-                    parent_shas=commit.get("parents"),
-                    extra_data={
-                        "display_id": commit.get("display_id"),
-                        "tag_names": commit.get("tag_names"),
-                    }
+                logger.info(f"Collecting commits after {after_date_str} (last 5 years)")
+                all_commits = await collector.collect_all_commits(
+                    project_key,
+                    repo_slug,
+                    after_date=after_date_str
                 )
-                await commit_repo.create(commit_create)
-                commits_count += 1
+                logger.info(f"Found {len(all_commits)} commits (with pagination, last 5 years)")
 
-            await session.commit()
-            logger.info(f"Commits collection completed: {commits_count} new commits")
-            return {"collected": commits_count}
+                for commit in all_commits:
+                    commit_id = commit.get("id") or commit.get("sha") or commit.get("hash")
+                    result = await session.execute(
+                        select(Commit).where(
+                            Commit.external_id == commit_id,
+                            Commit.repository_id == repository.id
+                        )
+                    )
+                    if result.scalar_one_or_none():
+                        continue
 
-        except Exception as e:
-            logger.error(f"Error during commits collection: {str(e)}")
-            await session.rollback()
-            raise
+                    # ВРЕМЕННО ОТКЛЮЧЕНО для ускорения тестирования
+                    # TODO: Включить обратно после тестирования
+                    diff_base64 = None
+                    # try:
+                    #     diff_data = await collector.collect_commit_diff(project_key, repo_slug, commit_id)
+                    #     if "data" in diff_data and "content" in diff_data["data"]:
+                    #         diff_base64 = diff_data["data"]["content"]
+                    # except Exception as e:
+                    #     logger.warning(f"Failed to collect diff for {commit_id}: {str(e)}")
+
+                    author = commit.get("author", {})
+                    committer = commit.get("committer", {})
+
+                    committer_timestamp = commit.get("committer_timestamp")
+                    author_timestamp = commit.get("author_timestamp")
+
+                    if committer_timestamp:
+                        committed_at = datetime.fromtimestamp(committer_timestamp / 1000, tz=timezone.utc)
+                    elif "created_at" in commit:
+                        from dateutil import parser
+                        committed_at = parser.parse(commit["created_at"])
+                    else:
+                        committed_at = datetime.now(timezone.utc)
+
+                    if author_timestamp:
+                        authored_at = datetime.fromtimestamp(author_timestamp / 1000, tz=timezone.utc)
+                    else:
+                        authored_at = committed_at
+
+                    commit_create = CommitCreate(
+                        external_id=commit_id,
+                        repository_id=repository.id,
+                        author_name=author.get("name", "Unknown"),
+                        author_email=author.get("email_address") or author.get("email", "unknown@example.com"),
+                        committer_name=committer.get("name", "Unknown"),
+                        committer_email=committer.get("email_address") or committer.get("email", "unknown@example.com"),
+                        message=commit.get("message", ""),
+                        authored_date=authored_at,
+                        committed_at=committed_at,
+                        diff_base64=diff_base64,
+                        branch_names=commit.get("branch_names"),
+                        parent_shas=commit.get("parents"),
+                        extra_data={
+                            "display_id": commit.get("display_id"),
+                            "tag_names": commit.get("tag_names"),
+                        }
+                    )
+                    await commit_repo.create(commit_create)
+                    commits_count += 1
+
+                await session.commit()
+                logger.info(f"Commits collection completed: {commits_count} new commits")
+                return {"collected": commits_count}
+
+            except Exception as e:
+                logger.error(f"Error during commits collection: {str(e)}")
+                await session.rollback()
+                raise
+    finally:
+        await engine.dispose()
